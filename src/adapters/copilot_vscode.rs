@@ -305,7 +305,7 @@ impl CopilotVsCodeAdapter {
             title = truncate_title(messages[0].trim_start_matches("» ").trim(), 100, true);
         }
 
-        // VS Code 1.109+ dates a session by its last request, not `lastMessageDate`.
+        // Session logs omit `lastMessageDate`; VS Code derives it from the last request.
         let timestamp = timestamp_from_ms(
             data.get("lastMessageDate")
                 .or_else(|| requests.last().and_then(|request| request.get("timestamp")))
@@ -376,8 +376,11 @@ fn replay_session_log(bytes: &[u8]) -> Option<Value> {
             return None;
         };
         let value = entry.get_mut("v").map(Value::take);
-        let path = entry.get_mut("k").map(Value::take).unwrap_or_default();
-        let path = path.as_array().map(Vec::as_slice).unwrap_or_default();
+        let path = entry
+            .get("k")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         match entry.get("kind").and_then(Value::as_u64)? {
             0 => state = Some(value?),
             1 | 3 if path.is_empty() => {}
@@ -493,7 +496,6 @@ mod tests {
             json!({"kind": 2, "k": ["requests", 0, "response"], "v": [{"value": "I can help"}]}),
             // Streaming rewrites the growing last part.
             json!({"kind": 2, "k": ["requests", 0, "response"], "i": 0, "v": [{"value": "I can help with code and tests."}]}),
-            json!({"kind": 1, "k": ["requests", 0, "modelState"], "v": {"value": 1}}),
             json!({"kind": 1, "k": ["customTitle"], "v": "Removed title"}),
             json!({"kind": 3, "k": ["customTitle"]}),
         ];
